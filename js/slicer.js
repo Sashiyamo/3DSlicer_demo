@@ -91,7 +91,6 @@ function createPlaneStencilGroup( geometry, plane, renderOrder ) {
 }
 
 function init() {
-
     clock = new THREE.Clock();
 
     scene = new THREE.Scene();
@@ -116,8 +115,9 @@ function init() {
     loader = new STLLoader();
     let geometry = new THREE.BufferGeometry()
 
+    document.getElementById("loader").style.display = "flex"
     loader.load("2.stl", function (geom) {
-        document.getElementById("loader").style.display = "flex"
+
         geometry.copy(geom)
         geometry.center()
         geometry.rotateX(-Math.PI / 2)
@@ -207,6 +207,7 @@ function init() {
     const clippedColorFront = new THREE.Mesh( geometry, material );
     clippedColorFront.castShadow = true;
     clippedColorFront.renderOrder = 6;
+
     object.add( clippedColorFront );
 
 
