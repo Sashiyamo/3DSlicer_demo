@@ -17,7 +17,6 @@ import { STLLoader } from 'https://unpkg.com/three@0.139.0/examples/jsm/loaders/
 // import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 // import { STLLoader } from '../node_modules/three/examples/jsm/loaders/STLLoader.js'
 
-
 let camera, scene, renderer, object, loader;
 let planes, planeObjects, planeHelpers;
 let clock;
@@ -118,6 +117,7 @@ function init() {
     let geometry = new THREE.BufferGeometry()
 
     loader.load("2.stl", function (geom) {
+        document.getElementById("loader").style.display = "flex"
         geometry.copy(geom)
         geometry.center()
         geometry.rotateX(-Math.PI / 2)
@@ -128,6 +128,8 @@ function init() {
 
         params.planeY.constant = planePosition
         // console.log(params.planeY.constant)
+
+        document.getElementById("loader").style.display = "none"
     });
 
     //const geometry = new THREE.TorusKnotGeometry( 0.4, 0.15, 220, 60 );
@@ -324,4 +326,10 @@ function animate() {
 
     renderer.render( scene, camera );
 
+}
+
+function loadBitmaps() {
+    let bit = createImageBitmap(document.querySelector("canvas"))
+
+    // let bitFile = new Blob([bit], {type: 'image/bmp'})
 }
