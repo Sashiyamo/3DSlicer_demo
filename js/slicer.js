@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'https://unpkg.com/three@0.139.0/examples/jsm/controls/OrbitControls.js';
 import { GUI } from 'https://unpkg.com/three@0.139.0/examples/jsm/libs/lil-gui.module.min.js';
 import { STLLoader } from 'https://unpkg.com/three@0.139.0/examples/jsm/loaders/STLLoader.js'
+import JSZip from '../node_modules/jszip/dist/jszip.min.js';
 
 // import * as THREE from '../node_modules/three/build/three.module.js';
 // import * as THREE from 'three';
@@ -22,6 +23,7 @@ let planes, planeObjects, planeHelpers;
 let clock;
 
 let planePosition = 45.1
+let slCount = 1000
 
 let params = {
 
@@ -38,7 +40,9 @@ let params = {
         negated: false,
         slicePlane: false,
         sliceView: false,
-        cameraTop: false
+        cameraTop: false,
+        slicesCount: slCount,
+        loadSlices: loadBitmaps
 
     },
     planeZ: {
@@ -221,7 +225,7 @@ function init() {
     ground.receiveShadow = true;
     scene.add( ground );
 
-    renderer = new THREE.WebGLRenderer( { antialias: true } );
+    renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
     renderer.shadowMap.enabled = true;
     renderer.setPixelRatio( window.devicePixelRatio );
     renderer.setSize( window.innerWidth, window.innerHeight );
@@ -278,6 +282,8 @@ function init() {
             camera.updateProjectionMatrix();
         }
     });
+    planeY.add( params.planeY, 'slicesCount' ).min( 2 ).max( slCount );
+    planeY.add( params.planeY, 'loadSlices')
     // planeY.add( params.planeY, 'negated' ).onChange( () => {
     //
     // 	planes[ 1 ].negate();
@@ -330,7 +336,26 @@ function animate() {
 }
 
 function loadBitmaps() {
-    let bit = createImageBitmap(document.querySelector("canvas"))
+    params.planeY.sliceView = true
+    params.planeY.cameraTop = true
+    let zip = new JSZip();
 
-    // let bitFile = new Blob([bit], {type: 'image/bmp'})
+    for (let i = 0; i < Math.round(params.planeY.slicesCount); i++) {
+        planes[1].constant = i
+
+        let slice = new Image();
+        slice.src = renderer.domElement.toDataURL("image/bmp");
+        zip.add("slice" + i + ".bmp", slice)
+
+    //     let link = document.createElement("a")
+    //     link.download = "image.bmp"
+    //     link.href = document.querySelector("canvas").toDataURL("image/bmp")
+    //     link.click()
+    }
+
+    let content = zip.generate()
+    let link = document.createElement("a")
+    link.download = "image.bmp"
+    link.href = "data:application/zip;base64," + content
+    link.click()
 }
