@@ -3,11 +3,18 @@
 // import { GUI } from './jsm/libs/lil-gui.module.min.js';
 // import { STLLoader } from './jsm/loaders/STLLoader.js';
 
+// import * as THREE from 'three';
+// import { OrbitControls } from 'https://unpkg.com/three@0.139.0/examples/jsm/controls/OrbitControls.js';
+// import { GUI } from 'https://unpkg.com/three@0.139.0/examples/jsm/libs/lil-gui.module.min.js';
+// import { STLLoader } from 'https://unpkg.com/three@0.139.0/examples/jsm/loaders/STLLoader.js'
+// import JSZip from '../node_modules/jszip/dist/jszip.min.js';
+
 import * as THREE from 'three';
-import { OrbitControls } from 'https://unpkg.com/three@0.139.0/examples/jsm/controls/OrbitControls.js';
-import { GUI } from 'https://unpkg.com/three@0.139.0/examples/jsm/libs/lil-gui.module.min.js';
-import { STLLoader } from 'https://unpkg.com/three@0.139.0/examples/jsm/loaders/STLLoader.js'
-import JSZip from '../node_modules/jszip/dist/jszip.min.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
+import JSZip from 'jszip';
+
 
 // import * as THREE from '../node_modules/three/build/three.module.js';
 // import * as THREE from 'three';
@@ -21,6 +28,7 @@ import JSZip from '../node_modules/jszip/dist/jszip.min.js';
 let camera, scene, renderer, object, loader;
 let planes, planeObjects, planeHelpers;
 let clock;
+let clippedColorFront;
 
 let planePosition = 45.1
 let slCount = 1000
@@ -121,6 +129,7 @@ function init() {
 
     document.getElementById("loader").style.display = "flex"
     loader.load("2.stl", function (geom) {
+        // console.log(geom)
 
         geometry.copy(geom)
         geometry.center()
@@ -208,7 +217,7 @@ function init() {
 
     } );
 
-    const clippedColorFront = new THREE.Mesh( geometry, material );
+    clippedColorFront = new THREE.Mesh( geometry, material );
     clippedColorFront.castShadow = true;
     clippedColorFront.renderOrder = 6;
 
@@ -335,27 +344,65 @@ function animate() {
 
 }
 
-function loadBitmaps() {
-    params.planeY.sliceView = true
-    params.planeY.cameraTop = true
+function getCanvasBlob(canvas) {
+    return new Promise(function(resolve, reject) {
+        canvas.toBlob(function(blob) {
+            resolve(blob)
+        }, "image/bmp")
+    })
+}
+
+async function loadBitmaps() {
+    document.getElementById("loader").style.display = "flex"
+
+    planeHelpers[1].visible = false
+    renderer.setClearColor( 0x0000000 )
+    clippedColorFront.visible = false
+    planeObjects[1].material.color.set( 0xFFFFFF )
+
+    camera.position.set( 0, 300, 0 );
+    camera.lookAt( 0, 0, 0 );
+    camera.updateProjectionMatrix();
+
     let zip = new JSZip();
+    let len = Math.round(params.planeY.slicesCount)
+    console.log(planePosition)
 
-    for (let i = 0; i < Math.round(params.planeY.slicesCount); i++) {
-        planes[1].constant = i
+    for (let i = -1; i < len; i++) {
+        planes[1].constant = 2 * planePosition / (len - 1) * i - (planePosition - 1)
+        document.getElementById("load-info").innerText = "Ready " + (i + 1) + " slices of " + len
+        console.log("Generated", i, planes[1].constant)
 
-        let slice = new Image();
-        slice.src = renderer.domElement.toDataURL("image/bmp");
-        zip.add("slice" + i + ".bmp", slice)
+        // let slice = new Image();
+        // slice.src = renderer.domElement.toBlob("image/bmp");
+        let blob = await getCanvasBlob(renderer.domElement)
+        zip.file("slice" + i + ".bmp", blob)
 
-    //     let link = document.createElement("a")
-    //     link.download = "image.bmp"
-    //     link.href = document.querySelector("canvas").toDataURL("image/bmp")
-    //     link.click()
+        //     let link = document.createElement("a")
+        //     link.download = "image.bmp"
+        //     link.href = document.querySelector("canvas").toDataURL("image/bmp")
+        //     link.click()
     }
 
-    let content = zip.generate()
-    let link = document.createElement("a")
-    link.download = "image.bmp"
-    link.href = "data:application/zip;base64," + content
-    link.click()
+    zip.remove("slice-1.bmp")
+    document.getElementById("load-info").innerText = "Zip archive is going..."
+    console.log("Zip is ready")
+
+    zip.generateAsync({type:"base64"})
+        .then(function(content) {
+            let link = document.createElement("a")
+            link.download = "slices.zip"
+            link.href = "data:application/zip;base64," + content
+            link.click()
+            document.getElementById("loader").style.display = "none"
+            document.getElementById("load-info").innerText = "Secondly, model is loading..."
+        });
+
+    renderer.setClearColor( 0x263238 )
+    clippedColorFront.visible = true
+    planeObjects[1].material.color.set( 0xE91E63 )
+
+    camera.position.set( 200, 200, 200 );
+    camera.lookAt( 0, 0, 0 );
+    camera.updateProjectionMatrix();
 }
