@@ -395,7 +395,7 @@ async function loadBitmaps() {
             link.href = "data:application/zip;base64," + content
             link.click()
             document.getElementById("loader").style.display = "none"
-            document.getElementById("load-info").innerText = "Secondly, model is loading..."
+            document.getElementById("load-info").innerText = "One second, model is loading..."
         });
 
     renderer.setClearColor( 0x263238 )

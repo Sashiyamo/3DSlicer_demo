@@ -5,7 +5,8 @@ canvas { width: 100%; height: 100% }
     position: absolute;
     top: 40%;
     left: 40%;
-    color: #3498FF;
+    /*color: #3498FF;*/
+    color: #2cc9ff;
     font-size: 24px;
     display: none;
     flex-direction: column;
@@ -26,7 +27,7 @@ canvas { width: 100%; height: 100% }
     width: 13px;
     height: 13px;
     border-radius: 50%;
-    background: #3498FF;
+    background: #2cc9ff;
     animation-timing-function: cubic-bezier(0, 1, 1, 0);
 }
 .lds-ellipsis div:nth-child(1) {
