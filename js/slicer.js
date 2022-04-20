@@ -1,8 +1,3 @@
-// import * as THREE from '../build/three.module.js';
-// import { OrbitControls } from './jsm/controls/OrbitControls.js';
-// import { GUI } from './jsm/libs/lil-gui.module.min.js';
-// import { STLLoader } from './jsm/loaders/STLLoader.js';
-
 // import * as THREE from 'three';
 // import { OrbitControls } from 'https://unpkg.com/three@0.139.0/examples/jsm/controls/OrbitControls.js';
 // import { GUI } from 'https://unpkg.com/three@0.139.0/examples/jsm/libs/lil-gui.module.min.js';
@@ -15,36 +10,31 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import JSZip from 'jszip';
 
-
-// import * as THREE from '../node_modules/three/build/three.module.js';
-// import * as THREE from 'three';
-// import { OrbitControls } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
-// import { GUI } from '../node_modules/three/examples/jsm/libs/lil-gui.module.min.js';
-// import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-// import { STLLoader } from "three/examples/jsm/loaders/STLLoader";
-// import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
-// import { STLLoader } from '../node_modules/three/examples/jsm/loaders/STLLoader.js'
-
-let camera, scene, renderer, object, loader;
+let camera, scene, renderer, object, loader, dirLight;
 let planes, planeObjects, planeHelpers;
-let clock;
+let clock, controls;
 let clippedColorFront;
 
-let planePosition = 45.1
-let slCount = 1000
+let uiPlanePos, uiSlicePlane, uiSliceView, uiCameraTop, uiSlicesCount;
+
+let planePosition = 100;
+let slCount = 1000;
+let fileName;
 
 let params = {
 
+    loadModel: modelUpload,
+
     planeX: {
 
-        constant: 1,
+        planePos: 1,
         negated: false,
         slicePlane: false
 
     },
     planeY: {
 
-        constant: planePosition,
+        planePos: planePosition,
         negated: false,
         slicePlane: false,
         sliceView: false,
@@ -55,7 +45,7 @@ let params = {
     },
     planeZ: {
 
-        constant: 1,
+        planePos: 1,
         negated: false,
         slicePlane: false
 
@@ -64,6 +54,44 @@ let params = {
 
 init();
 animate();
+
+document.addEventListener('dragover', e => e.preventDefault())
+document.addEventListener('drop', e => e.preventDefault())
+document.querySelector("body").addEventListener("dragenter", (e) => {
+    document.getElementById("dragArea").style.display = "flex"
+    // console.log("enter", e.target)
+})
+document.querySelector("body").addEventListener("dragleave", (e) => {
+    document.getElementById("dragArea").style.display = "none"
+    // console.log("leave", e.target)
+})
+document.querySelector("canvas").addEventListener("drop", e => {
+    e.preventDefault()
+
+    let reader = new FileReader()
+    fileName = e.dataTransfer.files[0].name
+
+    reader.onload = function (e) {
+        modelLoad(e.target.result)
+    }
+    reader.readAsDataURL(e.dataTransfer.files[0]);
+
+    document.getElementById("dragArea").style.display = "none"
+})
+
+function modelUpload() {
+    let i = document.querySelector("input")
+    let reader = new FileReader()
+
+    i.click()
+    i.addEventListener('change', () => {
+        fileName = i.files[0].name
+        reader.onload = function (e) {
+            modelLoad(e.target.result)
+        }
+        reader.readAsDataURL(i.files[0]);
+    })
+}
 
 function createPlaneStencilGroup( geometry, plane, renderOrder ) {
 
@@ -112,7 +140,7 @@ function init() {
 
     scene.add( new THREE.AmbientLight( 0xffffff, 0.5 ) );
 
-    const dirLight = new THREE.DirectionalLight( 0xffffff, 1 );
+    dirLight = new THREE.DirectionalLight( 0xffffff, 1 );
     dirLight.position.set( 150, 150, 150 );
     dirLight.castShadow = true;
     dirLight.shadow.camera.right = 2;
@@ -125,24 +153,123 @@ function init() {
     scene.add( dirLight );
 
     loader = new STLLoader();
+
+    modelLoad("2.stl")
+
+    renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
+    renderer.shadowMap.enabled = true;
+    renderer.setPixelRatio( window.devicePixelRatio );
+    renderer.setSize( window.innerWidth, window.innerHeight );
+    renderer.setClearColor( 0x263238 );
+    window.addEventListener( 'resize', onWindowResize );
+    document.body.appendChild( renderer.domElement );
+
+    renderer.localClippingEnabled = true;
+
+    controls = new OrbitControls( camera, renderer.domElement );
+    controls.minDistance = 2;
+    controls.maxDistance = 1000;
+    controls.update();
+
+    const gui = new GUI();
+
+    gui.add(params, 'loadModel')
+    // const planeX = gui.addFolder( 'planeX' );
+    // planeX.add( params.planeX, 'displayHelper' ).onChange( v => planeHelpers[ 0 ].visible = v );
+    // planeX.add( params.planeX, 'planePos' ).min( - 1 ).max( 1 ).onChange( d => planes[ 0 ].constant = d );
+    // planeX.add( params.planeX, 'negated' ).onChange( () => {
+    //
+    // 	planes[ 0 ].negate();
+    // 	params.planeX.constant = planes[ 0 ].constant;
+    //
+    // } );
+    // planeX.open();
+    const planeY = gui.addFolder( 'slicer' );
+    uiSlicePlane = planeY.add( params.planeY, 'slicePlane' )
+    uiSlicePlane.onChange( v => planeHelpers[1].visible = v );
+
+    uiPlanePos = planeY.add( params.planeY, 'planePos' ).min( - params.planeY.planePos ).max( params.planeY.planePos )
+    uiPlanePos.onChange( d => planes[1].constant = d );
+
+    uiSliceView = planeY.add( params.planeY, 'sliceView' )
+    uiSliceView.onChange( () => {
+        if (params.planeY.sliceView) {
+            renderer.setClearColor( 0x0000000 )
+            clippedColorFront.visible = false
+            planeObjects[1].material.color.set( 0xFFFFFF )
+            // dirLight.position.set( 0, 200, 0 );
+        }
+        else {
+            renderer.setClearColor( 0x263238 )
+            clippedColorFront.visible = true
+            planeObjects[1].material.color.set( 0xE91E63 )
+            // dirLight.position.set( 150, 150, 150 );
+        }
+    } );
+
+    uiCameraTop = planeY.add( params.planeY, 'cameraTop' )
+    uiCameraTop.onChange( () => {
+        if (params.planeY.cameraTop) {
+            camera.position.set( 0, 300, 0 );
+            camera.lookAt( 0, 0, 0 );
+            camera.updateProjectionMatrix();
+        }
+        else {
+            camera.position.set( 200, 200, 200 );
+            camera.lookAt( 0, 0, 0 );
+            camera.updateProjectionMatrix();
+        }
+    });
+
+    uiSlicesCount = planeY.add( params.planeY, 'slicesCount' ).min( 2 ).max( slCount ).step(1);
+
+    planeY.add( params.planeY, 'loadSlices')
+    // planeY.add( params.planeY, 'negated' ).onChange( () => {
+    //
+    // 	planes[ 1 ].negate();
+    // 	params.planeY.constant = planes[ 1 ].constant;
+    //
+    // } );
+    planeY.open();
+
+    // const planeZ = gui.addFolder( 'planeZ' );
+    // planeZ.add( params.planeZ, 'displayHelper' ).onChange( v => planeHelpers[ 2 ].visible = v );
+    // planeZ.add( params.planeZ, 'planePos' ).min( - 1 ).max( 1 ).onChange( d => planes[ 2 ].constant = d );
+    // planeZ.add( params.planeZ, 'negated' ).onChange( () => {
+    //
+    // 	planes[ 2 ].negate();
+    // 	params.planeZ.constant = planes[ 2 ].constant;
+    //
+    // } );
+    // planeZ.open();
+
+}
+
+function modelLoad( model ) {
+    scene = new THREE.Scene();
+    scene.add( new THREE.AmbientLight( 0xffffff, 0.5 ) );
+    scene.add( dirLight );
+
     let geometry = new THREE.BufferGeometry()
 
-    document.getElementById("loader").style.display = "flex"
-    loader.load("2.stl", function (geom) {
+    document.getElementById( "loader" ).style.display = "flex"
+    loader.load( model, function ( geom ) {
         // console.log(geom)
-
-        geometry.copy(geom)
+        geometry.copy( geom )
         geometry.center()
-        geometry.rotateX(-Math.PI / 2)
-        geometry.rotateY(Math.PI / 3)
-        console.log(geometry)
-        planePosition = geometry.boundingBox.max.y
-        // console.log(planePosition)
+        geometry.rotateX( -Math.PI / 2 )
+        geometry.rotateY( Math.PI / 3 )
+        console.log( geometry )
 
-        params.planeY.constant = planePosition
-        // console.log(params.planeY.constant)
+        // size = geometry.boundingSphere.radius
+        planePosition = Number( geometry.boundingBox.max.y.toFixed( 2 ) ) + 0.1 /// Fix
 
-        document.getElementById("loader").style.display = "none"
+        uiPlanePos.min( - planePosition ).max( planePosition )
+        uiPlanePos.setValue( planePosition )
+        uiSlicesCount.min( Math.round( planePosition ) )
+        uiSlicesCount.setValue( 1000 )
+
+        document.getElementById( "loader" ).style.display = "none"
     });
 
     //const geometry = new THREE.TorusKnotGeometry( 0.4, 0.15, 220, 60 );
@@ -150,9 +277,9 @@ function init() {
     scene.add( object );
 
     planes = [
-        new THREE.Plane( new THREE.Vector3( - 1, 0, 0 ), 100 ),
+        new THREE.Plane( new THREE.Vector3( - 1, 0, 0 ), planePosition * 10 ),
         new THREE.Plane( new THREE.Vector3( 0, - 1, 0 ), planePosition ),
-        new THREE.Plane( new THREE.Vector3( 0, 0, - 1 ), 100 )
+        new THREE.Plane( new THREE.Vector3( 0, 0, - 1 ), planePosition * 10 )
     ];
 
     planeHelpers = planes.map( p => new THREE.PlaneHelper( p, 100, 0x000000 ) );
@@ -223,94 +350,12 @@ function init() {
 
     object.add( clippedColorFront );
 
-
-    const ground = new THREE.Mesh(
-        new THREE.PlaneGeometry( 100, 100, 1, 1 ),
-        new THREE.ShadowMaterial( { color: 0x000000, opacity: 0.25, side: THREE.DoubleSide } )
-    );
-
-    ground.rotation.x = - Math.PI / 2;
-    ground.position.y = - 1;
-    ground.receiveShadow = true;
-    scene.add( ground );
-
-    renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
-    renderer.shadowMap.enabled = true;
-    renderer.setPixelRatio( window.devicePixelRatio );
-    renderer.setSize( window.innerWidth, window.innerHeight );
-    renderer.setClearColor( 0x263238 );
-    window.addEventListener( 'resize', onWindowResize );
-    document.body.appendChild( renderer.domElement );
-
-    renderer.localClippingEnabled = true;
-
-    const controls = new OrbitControls( camera, renderer.domElement );
-    controls.minDistance = 2;
-    controls.maxDistance = 1000;
-    controls.update();
-
-    const gui = new GUI();
-
-    // const planeX = gui.addFolder( 'planeX' );
-    // planeX.add( params.planeX, 'displayHelper' ).onChange( v => planeHelpers[ 0 ].visible = v );
-    // planeX.add( params.planeX, 'constant' ).min( - 1 ).max( 1 ).onChange( d => planes[ 0 ].constant = d );
-    // planeX.add( params.planeX, 'negated' ).onChange( () => {
+    // camera.position.set( 200, 200, 200 );
+    // dirLight.position.set( 150, 150, 150 );
     //
-    // 	planes[ 0 ].negate();
-    // 	params.planeX.constant = planes[ 0 ].constant;
-    //
-    // } );
-    // planeX.open();
-
-    const planeY = gui.addFolder( 'slicer' );
-    planeY.add( params.planeY, 'slicePlane' ).onChange( v => planeHelpers[ 1 ].visible = v );
-    planeY.add( params.planeY, 'constant' ).min( - planePosition ).max( planePosition ).onChange( d => planes[ 1 ].constant = d );
-    planeY.add( params.planeY, 'sliceView' ).onChange( () => {
-        if (params.planeY.sliceView) {
-            renderer.setClearColor( 0x0000000 )
-            clippedColorFront.visible = false
-            planeObjects[1].material.color.set( 0xFFFFFF )
-            // dirLight.position.set( 0, 200, 0 );
-        }
-        else {
-            renderer.setClearColor( 0x263238 )
-            clippedColorFront.visible = true
-            planeObjects[1].material.color.set( 0xE91E63 )
-            // dirLight.position.set( 150, 150, 150 );
-        }
-    } );
-    planeY.add( params.planeY, 'cameraTop' ).onChange( () => {
-        if (params.planeY.cameraTop) {
-            camera.position.set( 0, 300, 0 );
-            camera.lookAt( 0, 0, 0 );
-            camera.updateProjectionMatrix();
-        }
-        else {
-            camera.position.set( 200, 200, 200 );
-            camera.lookAt( 0, 0, 0 );
-            camera.updateProjectionMatrix();
-        }
-    });
-    planeY.add( params.planeY, 'slicesCount' ).min( 2 ).max( slCount );
-    planeY.add( params.planeY, 'loadSlices')
-    // planeY.add( params.planeY, 'negated' ).onChange( () => {
-    //
-    // 	planes[ 1 ].negate();
-    // 	params.planeY.constant = planes[ 1 ].constant;
-    //
-    // } );
-    planeY.open();
-
-    // const planeZ = gui.addFolder( 'planeZ' );
-    // planeZ.add( params.planeZ, 'displayHelper' ).onChange( v => planeHelpers[ 2 ].visible = v );
-    // planeZ.add( params.planeZ, 'constant' ).min( - 1 ).max( 1 ).onChange( d => planes[ 2 ].constant = d );
-    // planeZ.add( params.planeZ, 'negated' ).onChange( () => {
-    //
-    // 	planes[ 2 ].negate();
-    // 	params.planeZ.constant = planes[ 2 ].constant;
-    //
-    // } );
-    // planeZ.open();
+    // controls.minDistance = 2;
+    // controls.maxDistance = 1000;
+    // controls.update();
 
 }
 
@@ -370,32 +415,25 @@ async function loadBitmaps() {
 
     for (let i = -1; i < len; i++) {
         planes[1].constant = 2 * planePosition / (len - 1) * i - (planePosition - 1)
-        document.getElementById("load-info").innerText = "Ready " + (i + 1) + " slices of " + len
+        document.getElementById("load-info").innerText = (i + 1) + " slices of " + len + " is ready"
         console.log("Generated", i, planes[1].constant)
 
-        // let slice = new Image();
-        // slice.src = renderer.domElement.toBlob("image/bmp");
         let blob = await getCanvasBlob(renderer.domElement)
         zip.file("slice" + i + ".bmp", blob)
-
-        //     let link = document.createElement("a")
-        //     link.download = "image.bmp"
-        //     link.href = document.querySelector("canvas").toDataURL("image/bmp")
-        //     link.click()
     }
 
     zip.remove("slice-1.bmp")
     document.getElementById("load-info").innerText = "Zip archive is going..."
     console.log("Zip is ready")
 
-    zip.generateAsync({type:"base64"})
-        .then(function(content) {
-            let link = document.createElement("a")
-            link.download = "slices.zip"
+    zip.generateAsync( { type:"base64" } )
+        .then( function( content ) {
+            let link = document.createElement( "a" )
+            link.download = fileName.substring( 0, fileName.length - 4 ) + ".zip"
             link.href = "data:application/zip;base64," + content
             link.click()
-            document.getElementById("loader").style.display = "none"
-            document.getElementById("load-info").innerText = "One second, model is loading..."
+            document.getElementById( "loader" ).style.display = "none"
+            document.getElementById( "load-info" ).innerText = "One second, model is loading..."
         });
 
     renderer.setClearColor( 0x263238 )
