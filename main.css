@@ -4,7 +4,8 @@ canvas {
     height: 100%;
 }
 
-input #file {
+#modelInput {
+    pointer-events: none;
     display: none;
 }
 

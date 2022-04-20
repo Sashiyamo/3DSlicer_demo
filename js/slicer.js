@@ -9,6 +9,21 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import JSZip from 'jszip';
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyBs5T_Qf_RqPQDjatodHZxzISJIh30ueU0",
+    authDomain: "tdslicer.firebaseapp.com",
+    projectId: "tdslicer",
+    storageBucket: "tdslicer.appspot.com",
+    messagingSenderId: "227589763093",
+    appId: "1:227589763093:web:ec44d987adfe9b858a1e1c",
+    measurementId: "G-1415QE6K41"
+};
+
+const app = initializeApp( firebaseConfig );
+const analytics = getAnalytics( app );
 
 let camera, scene, renderer, object, loader, dirLight;
 let planes, planeObjects, planeHelpers;
@@ -19,7 +34,7 @@ let uiPlanePos, uiSlicePlane, uiSliceView, uiCameraTop, uiSlicesCount;
 
 let planePosition = 100;
 let slCount = 1000;
-let fileName;
+let fileName = "yoda.stl"
 
 let params = {
 
@@ -55,41 +70,41 @@ let params = {
 init();
 animate();
 
-document.addEventListener('dragover', e => e.preventDefault())
-document.addEventListener('drop', e => e.preventDefault())
-document.querySelector("body").addEventListener("dragenter", (e) => {
-    document.getElementById("dragArea").style.display = "flex"
+document.addEventListener( 'dragover', e => e.preventDefault() )
+document.addEventListener( 'drop', e => e.preventDefault() )
+document.querySelector( "body" ).addEventListener( "dragenter", ( e ) => {
+    document.getElementById( "dragArea" ).style.display = "flex"
     // console.log("enter", e.target)
 })
-document.querySelector("body").addEventListener("dragleave", (e) => {
-    document.getElementById("dragArea").style.display = "none"
+document.querySelector( "body" ).addEventListener( "dragleave", ( e ) => {
+    document.getElementById( "dragArea" ).style.display = "none"
     // console.log("leave", e.target)
 })
-document.querySelector("canvas").addEventListener("drop", e => {
+document.querySelector( "canvas" ).addEventListener( "drop", e => {
     e.preventDefault()
 
     let reader = new FileReader()
     fileName = e.dataTransfer.files[0].name
 
-    reader.onload = function (e) {
-        modelLoad(e.target.result)
+    reader.onload = function ( e ) {
+        modelLoad( e.target.result )
     }
-    reader.readAsDataURL(e.dataTransfer.files[0]);
+    reader.readAsDataURL( e.dataTransfer.files[0] );
 
-    document.getElementById("dragArea").style.display = "none"
+    document.getElementById( "dragArea" ).style.display = "none"
 })
 
 function modelUpload() {
-    let i = document.querySelector("input")
+    let i = document.querySelector( "input" )
     let reader = new FileReader()
 
     i.click()
     i.addEventListener('change', () => {
         fileName = i.files[0].name
-        reader.onload = function (e) {
-            modelLoad(e.target.result)
+        reader.onload = function ( e ) {
+            modelLoad( e.target.result )
         }
-        reader.readAsDataURL(i.files[0]);
+        reader.readAsDataURL( i.files[0] );
     })
 }
 
@@ -105,7 +120,7 @@ function createPlaneStencilGroup( geometry, plane, renderOrder ) {
 
     const mat0 = baseMat.clone();
     mat0.side = THREE.BackSide;
-    mat0.clippingPlanes = [ plane ];
+    mat0.clippingPlanes = [plane];
     mat0.stencilFail = THREE.IncrementWrapStencilOp;
     mat0.stencilZFail = THREE.IncrementWrapStencilOp;
     mat0.stencilZPass = THREE.IncrementWrapStencilOp;
@@ -116,7 +131,7 @@ function createPlaneStencilGroup( geometry, plane, renderOrder ) {
 
     const mat1 = baseMat.clone();
     mat1.side = THREE.FrontSide;
-    mat1.clippingPlanes = [ plane ];
+    mat1.clippingPlanes = [plane];
     mat1.stencilFail = THREE.DecrementWrapStencilOp;
     mat1.stencilZFail = THREE.DecrementWrapStencilOp;
     mat1.stencilZPass = THREE.DecrementWrapStencilOp;
@@ -154,7 +169,7 @@ function init() {
 
     loader = new STLLoader();
 
-    modelLoad("2.stl")
+    modelLoad( "2.stl" )
 
     renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
     renderer.shadowMap.enabled = true;
@@ -173,7 +188,7 @@ function init() {
 
     const gui = new GUI();
 
-    gui.add(params, 'loadModel')
+    gui.add( params, 'loadModel' )
     // const planeX = gui.addFolder( 'planeX' );
     // planeX.add( params.planeX, 'displayHelper' ).onChange( v => planeHelpers[ 0 ].visible = v );
     // planeX.add( params.planeX, 'planePos' ).min( - 1 ).max( 1 ).onChange( d => planes[ 0 ].constant = d );
@@ -193,7 +208,7 @@ function init() {
 
     uiSliceView = planeY.add( params.planeY, 'sliceView' )
     uiSliceView.onChange( () => {
-        if (params.planeY.sliceView) {
+        if ( params.planeY.sliceView ) {
             renderer.setClearColor( 0x0000000 )
             clippedColorFront.visible = false
             planeObjects[1].material.color.set( 0xFFFFFF )
@@ -209,7 +224,7 @@ function init() {
 
     uiCameraTop = planeY.add( params.planeY, 'cameraTop' )
     uiCameraTop.onChange( () => {
-        if (params.planeY.cameraTop) {
+        if ( params.planeY.cameraTop ) {
             camera.position.set( 0, 300, 0 );
             camera.lookAt( 0, 0, 0 );
             camera.updateProjectionMatrix();
@@ -221,9 +236,9 @@ function init() {
         }
     });
 
-    uiSlicesCount = planeY.add( params.planeY, 'slicesCount' ).min( 2 ).max( slCount ).step(1);
+    uiSlicesCount = planeY.add( params.planeY, 'slicesCount' ).min( 2 ).max( slCount ).step( 1 );
 
-    planeY.add( params.planeY, 'loadSlices')
+    planeY.add( params.planeY, 'loadSlices' )
     // planeY.add( params.planeY, 'negated' ).onChange( () => {
     //
     // 	planes[ 1 ].negate();
@@ -374,8 +389,8 @@ function animate() {
 
     for ( let i = 0; i < planeObjects.length; i ++ ) {
 
-        const plane = planes[ i ];
-        const po = planeObjects[ i ];
+        const plane = planes[i];
+        const po = planeObjects[i];
         plane.coplanarPoint( po.position );
         po.lookAt(
             po.position.x - plane.normal.x,
@@ -389,16 +404,16 @@ function animate() {
 
 }
 
-function getCanvasBlob(canvas) {
-    return new Promise(function(resolve, reject) {
-        canvas.toBlob(function(blob) {
-            resolve(blob)
-        }, "image/bmp")
+function getCanvasBlob( canvas ) {
+    return new Promise( function( resolve, reject ) {
+        canvas.toBlob( function( blob ) {
+            resolve( blob )
+        }, "image/bmp" )
     })
 }
 
 async function loadBitmaps() {
-    document.getElementById("loader").style.display = "flex"
+    document.getElementById( "loader" ).style.display = "flex"
 
     planeHelpers[1].visible = false
     renderer.setClearColor( 0x0000000 )
@@ -410,26 +425,25 @@ async function loadBitmaps() {
     camera.updateProjectionMatrix();
 
     let zip = new JSZip();
-    let len = Math.round(params.planeY.slicesCount)
-    console.log(planePosition)
+    let len = params.planeY.slicesCount
 
     for (let i = -1; i < len; i++) {
-        planes[1].constant = 2 * planePosition / (len - 1) * i - (planePosition - 1)
-        document.getElementById("load-info").innerText = (i + 1) + " slices of " + len + " is ready"
-        console.log("Generated", i, planes[1].constant)
+        planes[1].constant = 2 * planePosition / ( len - 1 ) * i - ( planePosition - 1 )
+        document.getElementById( "load-info" ).innerText = ( i + 1 ) + " slices of " + len + " is ready"
+        console.log( "Generated", i, planes[1].constant )
 
-        let blob = await getCanvasBlob(renderer.domElement)
-        zip.file("slice" + i + ".bmp", blob)
+        let blob = await getCanvasBlob( renderer.domElement )
+        zip.file( "slice" + i + ".bmp", blob )
     }
 
-    zip.remove("slice-1.bmp")
-    document.getElementById("load-info").innerText = "Zip archive is going..."
-    console.log("Zip is ready")
+    zip.remove( "slice-1.bmp" )
+    document.getElementById( "load-info" ).innerText = "Zip archive is going..."
+    console.log( "Zip is ready" )
 
     zip.generateAsync( { type:"base64" } )
         .then( function( content ) {
             let link = document.createElement( "a" )
-            link.download = fileName.substring( 0, fileName.length - 4 ) + ".zip"
+            link.download = fileName.substring( 0, fileName.length - 4 ) + "_" + len + ".zip"
             link.href = "data:application/zip;base64," + content
             link.click()
             document.getElementById( "loader" ).style.display = "none"
