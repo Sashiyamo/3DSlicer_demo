@@ -39,6 +39,7 @@ let uiSelectModel, uiPlanePos, uiSlicePlane, uiSliceView, uiCameraTop, uiSlicesC
 let planePosition = 100;
 let slCount = 1000;
 let fileName = "Крепление2.stl"
+let filePath = "Крепление2.stl"
 let documentID = null;
 
 let params = {
@@ -74,18 +75,36 @@ let params = {
 };
 
 addGUI()
-init();
-animate();
+preInit(() => {
+    init(() => {
+        animate()
+        document.addEventListener( 'dragover', e => e.preventDefault() )
+        document.addEventListener( 'drop', e => e.preventDefault() )
+        document.querySelector( "body" ).addEventListener( "dragenter", ( e ) => {
+            document.getElementById( "dragArea" ).style.display = "flex"
+            // console.log("enter", e.target)
+        })
+        document.querySelector( "body" ).addEventListener( "dragleave", ( e ) => {
+            document.getElementById( "dragArea" ).style.display = "none"
+            // console.log("leave", e.target)
+        })
+        document.querySelector( "canvas" ).addEventListener( "drop", e => {
+            e.preventDefault()
 
-document.addEventListener( 'dragover', e => e.preventDefault() )
-document.addEventListener( 'drop', e => e.preventDefault() )
-document.querySelector( "body" ).addEventListener( "dragenter", ( e ) => {
-    document.getElementById( "dragArea" ).style.display = "flex"
-    // console.log("enter", e.target)
-})
-document.querySelector( "body" ).addEventListener( "dragleave", ( e ) => {
-    document.getElementById( "dragArea" ).style.display = "none"
-    // console.log("leave", e.target)
+            let reader = new FileReader()
+            fileName = e.dataTransfer.files[0].name
+            filePath = `${localStorage.getItem( "userID" )}/${fileName}`
+
+            reader.onload = function ( e ) {
+                modelLoad( e.target.result )
+            }
+            reader.readAsDataURL( e.dataTransfer.files[0] );
+            uploadToFirebase( e.dataTransfer.files[0] )
+
+            document.getElementById( "dragArea" ).style.display = "none"
+        })
+    })
+
 })
 
 // window.addEventListener("beforeunload", (event) => {
@@ -102,6 +121,7 @@ function modelUpload() {
     i.click()
     i.addEventListener('change', () => {
         fileName = i.files[0].name
+        filePath = `${localStorage.getItem( "userID" )}/${fileName}`
         reader.onload = function ( e ) {
             modelLoad( e.target.result )
             uploadToFirebase( i.files[0] )
@@ -123,6 +143,11 @@ function uploadToFirebase( file ) {
             let task = storageRef.put( file )
             task.on( "state_changed", () => {}, ( err ) => { console.log( err ) }, () => { console.log( "Complete!" ) } )
         })
+}
+
+async function getModelUrl(fileName) {
+    let fileRef = firebase.storage().ref( fileName )
+    return await fileRef.getDownloadURL()
 }
 
 function addGUI() {
@@ -237,15 +262,18 @@ function createPlaneStencilGroup( geometry, plane, renderOrder ) {
 
 }
 
-function init() {
+function preInit(callback) {
     firebase.auth().signInAnonymously()
         .then( () => { console.log( "Authorized!" ) } )
     firebase.auth().onAuthStateChanged( (user) => {
         if (user) {
             localStorage.setItem( "userID", user.uid )
+            callback()
         }
     } )
+}
 
+function init(callback) {
     clock = new THREE.Clock();
 
     scene = new THREE.Scene();
@@ -268,6 +296,8 @@ function init() {
     scene.add( dirLight );
 
     loader = new STLLoader();
+
+    //debugger
 
     getLastModelUrl(localStorage.getItem( "userID" ))
         .then((url) => {
@@ -605,3 +635,8 @@ async function loadBitmaps() {
     camera.lookAt( 0, 0, 0 );
     camera.updateProjectionMatrix();
 }
+
+// VLAD LOX
+// У Набоки не закрылся (пока)
+// вухахаххахах
+// и по попоопопо долг
