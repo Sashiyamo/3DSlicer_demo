@@ -9,21 +9,25 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import JSZip from 'jszip';
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
+// import { initializeApp } from "firebase/app";
+// import { getAnalytics } from "firebase/analytics";
+import firebase from "firebase/compat";
+import "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyBs5T_Qf_RqPQDjatodHZxzISJIh30ueU0",
-    authDomain: "tdslicer.firebaseapp.com",
-    projectId: "tdslicer",
-    storageBucket: "tdslicer.appspot.com",
-    messagingSenderId: "227589763093",
-    appId: "1:227589763093:web:ec44d987adfe9b858a1e1c",
-    measurementId: "G-1415QE6K41"
+    apiKey: "AIzaSyBCFFWH2IxyvhRGDCiC1js8wBm-spRKiqk",
+    authDomain: "tdslicer-a2802.firebaseapp.com",
+    projectId: "tdslicer-a2802",
+    storageBucket: "tdslicer-a2802.appspot.com",
+    messagingSenderId: "210093740142",
+    appId: "1:210093740142:web:82a86e739976740194d67f",
+    measurementId: "G-50FD1587HR"
 };
 
-const app = initializeApp( firebaseConfig );
-const analytics = getAnalytics( app );
+const app = firebase.initializeApp( firebaseConfig );
+const storage = firebase.storage()
+const db = firebase.firestore();
 
 let camera, scene, renderer, object, loader, dirLight;
 let planes, planeObjects, planeHelpers;
@@ -34,7 +38,8 @@ let uiPlanePos, uiSlicePlane, uiSliceView, uiCameraTop, uiSlicesCount;
 
 let planePosition = 100;
 let slCount = 1000;
-let fileName = "yoda.stl"
+let fileName = "Крепление2.stl"
+let documentID = null;
 
 let params = {
 
@@ -67,6 +72,7 @@ let params = {
     }
 };
 
+addGUI()
 init();
 animate();
 
@@ -90,6 +96,7 @@ document.querySelector( "canvas" ).addEventListener( "drop", e => {
         modelLoad( e.target.result )
     }
     reader.readAsDataURL( e.dataTransfer.files[0] );
+    uploadToFirebase( e.dataTransfer.files[0] )
 
     document.getElementById( "dragArea" ).style.display = "none"
 })
@@ -103,9 +110,99 @@ function modelUpload() {
         fileName = i.files[0].name
         reader.onload = function ( e ) {
             modelLoad( e.target.result )
+            uploadToFirebase( i.files[0] )
         }
         reader.readAsDataURL( i.files[0] );
     })
+}
+
+function uploadToFirebase( file ) {
+    let userID = localStorage.getItem( "userID" )
+
+    let storageRef = firebase.storage().ref( `${userID}/${file.name}` )
+    storageRef.getDownloadURL()
+        .then(() => {
+            console.log(`File ${file.name} already exists`)
+            // console.error(`File ${file.name} already exists`)
+        })
+        .catch( () => {
+            let task = storageRef.put( file )
+            task.on( "state_changed", () => {}, ( err ) => { console.log( err ) }, () => { console.log( "Complete!" ) } )
+        })
+}
+
+function addGUI() {
+    const gui = new GUI();
+
+    gui.add( params, 'loadModel' )
+
+    const planeY = gui.addFolder( 'slicer' );
+    uiSlicePlane = planeY.add( params.planeY, 'slicePlane' )
+    uiSlicePlane.onChange( v => planeHelpers[1].visible = v );
+    uiSlicePlane.onFinishChange( async (val) => {
+        await updateModelData(documentID, {
+            slicePlane: val
+        })
+    })
+
+    uiPlanePos = planeY.add( params.planeY, 'planePos' ).min( - params.planeY.planePos ).max( params.planeY.planePos )
+    uiPlanePos.onChange( d => planes[1].constant = d );
+    uiPlanePos.onFinishChange( async (val) => {
+        await updateModelData(documentID, {
+            planePos: val
+        })
+    })
+
+    uiSliceView = planeY.add( params.planeY, 'sliceView' )
+    uiSliceView.onChange( () => {
+        if ( params.planeY.sliceView ) {
+            renderer.setClearColor( 0x0000000 )
+            clippedColorFront.visible = false
+            planeObjects[1].material.color.set( 0xFFFFFF )
+            // dirLight.position.set( 0, 200, 0 );
+        }
+        else {
+            renderer.setClearColor( 0x263238 )
+            clippedColorFront.visible = true
+            planeObjects[1].material.color.set( 0xE91E63 )
+            // dirLight.position.set( 150, 150, 150 );
+        }
+    } );
+    uiSliceView.onFinishChange(async (val) => {
+        await updateModelData(documentID, {
+            sliceView: val
+        })
+    })
+
+    uiCameraTop = planeY.add( params.planeY, 'cameraTop' )
+    uiCameraTop.onChange( () => {
+        if ( params.planeY.cameraTop ) {
+            camera.position.set( 0, 300, 0 );
+            camera.lookAt( 0, 0, 0 );
+            camera.updateProjectionMatrix();
+        }
+        else {
+            camera.position.set( 200, 200, 200 );
+            camera.lookAt( 0, 0, 0 );
+            camera.updateProjectionMatrix();
+        }
+    });
+    uiCameraTop.onFinishChange( async (val) => {
+        await updateModelData(documentID, {
+            cameraTop: val
+        })
+    })
+
+    uiSlicesCount = planeY.add( params.planeY, 'slicesCount' ).min( 2 ).max( slCount ).step( 1 );
+    uiSlicesCount.onFinishChange( async (val) => {
+        await updateModelData(documentID, {
+            slicesCount: val
+        })
+    })
+
+    planeY.add( params.planeY, 'loadSlices' )
+
+    planeY.open();
 }
 
 function createPlaneStencilGroup( geometry, plane, renderOrder ) {
@@ -146,6 +243,14 @@ function createPlaneStencilGroup( geometry, plane, renderOrder ) {
 }
 
 function init() {
+    firebase.auth().signInAnonymously()
+        .then( () => { console.log( "Authorized!" ) } )
+    firebase.auth().onAuthStateChanged( (user) => {
+        if (user) {
+            localStorage.setItem( "userID", user.uid )
+        }
+    } )
+
     clock = new THREE.Clock();
 
     scene = new THREE.Scene();
@@ -169,7 +274,7 @@ function init() {
 
     loader = new STLLoader();
 
-    modelLoad( "2.stl" )
+    modelLoad( "https://firebasestorage.googleapis.com/v0/b/tdslicer-a2802.appspot.com/o/%D0%9A%D1%80%D0%B5%D0%BF%D0%BB%D0%B5%D0%BD%D0%B8%D0%B52.stl?alt=media&token=116bb146-00f2-4700-badd-7e79622ceac5" )
 
     renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
     renderer.shadowMap.enabled = true;
@@ -186,81 +291,56 @@ function init() {
     controls.maxDistance = 1000;
     controls.update();
 
-    const gui = new GUI();
+}
 
-    gui.add( params, 'loadModel' )
-    // const planeX = gui.addFolder( 'planeX' );
-    // planeX.add( params.planeX, 'displayHelper' ).onChange( v => planeHelpers[ 0 ].visible = v );
-    // planeX.add( params.planeX, 'planePos' ).min( - 1 ).max( 1 ).onChange( d => planes[ 0 ].constant = d );
-    // planeX.add( params.planeX, 'negated' ).onChange( () => {
-    //
-    // 	planes[ 0 ].negate();
-    // 	params.planeX.constant = planes[ 0 ].constant;
-    //
-    // } );
-    // planeX.open();
-    const planeY = gui.addFolder( 'slicer' );
-    uiSlicePlane = planeY.add( params.planeY, 'slicePlane' )
-    uiSlicePlane.onChange( v => planeHelpers[1].visible = v );
+async function readModelData( userID, fileName ) {
+    const modelsRef = collection( db, "models" )
+    console.log(`Search model '${fileName} for user ${userID}'`)
+    const q = query( modelsRef, where( "userID", "==", userID ), where( "fileName", "==", fileName ) )
+    const data = await getDocs( q )
+    if (data.empty) {
+        console.log("Not found!")
+        return [null, null]
+    }
+    // documentID = data.docs[0].id
+    return [data.docs[0].id, data.docs[0].data()]
+}
 
-    uiPlanePos = planeY.add( params.planeY, 'planePos' ).min( - params.planeY.planePos ).max( params.planeY.planePos )
-    uiPlanePos.onChange( d => planes[1].constant = d );
+/**
+ * Получение или создание записи в бд для модели пользователя
+ * @param userID - Id пользователя
+ * @param fileName - Имя файла
+ * @param data - данные, которые будут записаны, если их не существует
+ * @returns {Promise<*[id, data]>} - Id записи и данные модели (либо существующие, либо новые)
+ */
+async function readOrCreateModelData( userID, fileName, data ) {
+    let [id, model] = await readModelData( userID, fileName )
+    if (!model) {
+        [id, model] = await writeModelData(userID, fileName, data)
+    }
+    return [id, model]
+}
 
-    uiSliceView = planeY.add( params.planeY, 'sliceView' )
-    uiSliceView.onChange( () => {
-        if ( params.planeY.sliceView ) {
-            renderer.setClearColor( 0x0000000 )
-            clippedColorFront.visible = false
-            planeObjects[1].material.color.set( 0xFFFFFF )
-            // dirLight.position.set( 0, 200, 0 );
-        }
-        else {
-            renderer.setClearColor( 0x263238 )
-            clippedColorFront.visible = true
-            planeObjects[1].material.color.set( 0xE91E63 )
-            // dirLight.position.set( 150, 150, 150 );
-        }
-    } );
+async function writeModelData( userID, fileName, data ) {
+    let result = await db.collection( "models" ).add( {
+        userID,
+        fileName,
+        ...data
+    } )
+    return [result.id, data]
+}
 
-    uiCameraTop = planeY.add( params.planeY, 'cameraTop' )
-    uiCameraTop.onChange( () => {
-        if ( params.planeY.cameraTop ) {
-            camera.position.set( 0, 300, 0 );
-            camera.lookAt( 0, 0, 0 );
-            camera.updateProjectionMatrix();
-        }
-        else {
-            camera.position.set( 200, 200, 200 );
-            camera.lookAt( 0, 0, 0 );
-            camera.updateProjectionMatrix();
-        }
-    });
-
-    uiSlicesCount = planeY.add( params.planeY, 'slicesCount' ).min( 2 ).max( slCount ).step( 1 );
-
-    planeY.add( params.planeY, 'loadSlices' )
-    // planeY.add( params.planeY, 'negated' ).onChange( () => {
-    //
-    // 	planes[ 1 ].negate();
-    // 	params.planeY.constant = planes[ 1 ].constant;
-    //
-    // } );
-    planeY.open();
-
-    // const planeZ = gui.addFolder( 'planeZ' );
-    // planeZ.add( params.planeZ, 'displayHelper' ).onChange( v => planeHelpers[ 2 ].visible = v );
-    // planeZ.add( params.planeZ, 'planePos' ).min( - 1 ).max( 1 ).onChange( d => planes[ 2 ].constant = d );
-    // planeZ.add( params.planeZ, 'negated' ).onChange( () => {
-    //
-    // 	planes[ 2 ].negate();
-    // 	params.planeZ.constant = planes[ 2 ].constant;
-    //
-    // } );
-    // planeZ.open();
-
+async function updateModelData( documentID, data ) {
+    if(!documentID) return
+    console.log(`Update doc '${documentID}'`, data)
+    await db.collection("models").doc(documentID).update(data)
 }
 
 function modelLoad( model ) {
+    //let modelData = readModelData( localStorage.getItem( "userID" ), fileName )
+    // console.log(modelData, documentID)
+    // console.log(modelData.then(res => { return res } ))
+
     scene = new THREE.Scene();
     scene.add( new THREE.AmbientLight( 0xffffff, 0.5 ) );
     scene.add( dirLight );
@@ -279,13 +359,41 @@ function modelLoad( model ) {
         // size = geometry.boundingSphere.radius
         planePosition = Number( geometry.boundingBox.max.y.toFixed( 2 ) ) + 0.1 /// Fix
 
-        uiPlanePos.min( - planePosition ).max( planePosition )
-        uiPlanePos.setValue( planePosition )
-        uiSlicesCount.min( Math.round( planePosition ) )
-        uiSlicesCount.setValue( 1000 )
+        // uiPlanePos.min( - planePosition ).max( planePosition )
+        // uiPlanePos.setValue( planePosition )
+        // uiSlicesCount.min( Math.round( planePosition ) ).max( 1000 )
+        // uiSlicesCount.setValue( 1000 )
 
-        document.getElementById( "loader" ).style.display = "none"
+        readOrCreateModelData( localStorage.getItem( "userID" ), fileName, {
+            slicePlane : false,
+            planePos : planePosition,
+            sliceView : false,
+            cameraTop : false,
+            slicesCount: 1000
+        } )
+            .then( data => {
+                let [id, modelData] = data
+                documentID = id
+
+                uiSlicePlane.setValue( modelData.slicePlane )
+                uiPlanePos.setValue( modelData.planePos )
+                uiSliceView.setValue( modelData.sliceView )
+                uiCameraTop.setValue( modelData.cameraTop )
+                uiSlicesCount.setValue( modelData.slicesCount )
+            })
+            .catch(() => {
+                console.log("Read or Write error")
+            })
+            .finally( () => {
+                document.getElementById("loader").style.display = "none"
+                uiPlanePos.min(-planePosition).max(planePosition)
+                uiSlicesCount.min(Math.round(planePosition)).max(1000)
+                uiPlanePos.updateDisplay()
+                uiSlicesCount.updateDisplay()
+            })
+
     });
+
 
     //const geometry = new THREE.TorusKnotGeometry( 0.4, 0.15, 220, 60 );
     object = new THREE.Group();
