@@ -45,7 +45,7 @@ let documentID = null;
 let params = {
 
     loadModel: modelUpload,
-    selectModel: 1,
+//    selectModel: "Крепление2.stl",
 
     planeX: {
 
@@ -145,8 +145,8 @@ function uploadToFirebase( file ) {
         })
 }
 
-async function getModelUrl(fileName) {
-    let fileRef = firebase.storage().ref( fileName )
+async function getModelUrl(filePath) {
+    let fileRef = firebase.storage().ref( filePath )
     return await fileRef.getDownloadURL()
 }
 
@@ -154,7 +154,16 @@ function addGUI() {
     const gui = new GUI();
 
     gui.add( params, 'loadModel' )
-    uiSelectModel = gui.add( params, 'selectModel' )
+    // uiSelectModel = gui.add( params, 'selectModel' , {
+    //     "Крепление2.stl": "123",
+    //     "orhquifhqwf" : "fahfoahf"
+    // })
+    // uiSelectModel.onChange( () => {
+    //     console.log(params.selectModel)
+    //     // modelLoad(documentID, {
+    //     //     slicePlane: val
+    //     // })
+    // })
 
     const planeY = gui.addFolder( 'slicer' );
     uiSlicePlane = planeY.add( params.planeY, 'slicePlane' )
@@ -454,11 +463,30 @@ function modelLoad( model ) {
                 console.log("Read or Write error")
             })
             .finally( () => {
+                updateModelData( documentID, { time : new Date().getTime() } ) // Warning
                 document.getElementById("loader").style.display = "none"
                 uiPlanePos.min(-planePosition).max(planePosition)
                 uiSlicesCount.min(Math.round(planePosition)).max(1000)
                 uiPlanePos.updateDisplay()
                 uiSlicesCount.updateDisplay()
+
+                // getUserModels(localStorage.getItem("userID")).then( models => { // Warning
+                //     if (models.length === 0) {
+                //         uiSelectModel.setValue( { fileName : 1 } )
+                //     } else {
+                //         let par = {}
+                //         models.forEach( (val) => {
+                //             par[val.fileName] = val.filePath //modelLoad(getModelUrl(val.filePath))
+                //         } )
+                //         console.log(par);
+                //         // uiSelectModel.setValue( par )
+                //         // uiSelectModel.options( par )
+                //         // uiSelectModel.onFinishChange( () => {
+                //         //     console.log("hello");
+                //         // } )
+                //     }
+                //
+                // } )
             })
 
     });
