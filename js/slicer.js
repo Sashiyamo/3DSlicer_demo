@@ -34,7 +34,7 @@ let planes, planeObjects, planeHelpers;
 let clock, controls;
 let clippedColorFront;
 
-let uiPlanePos, uiSlicePlane, uiSliceView, uiCameraTop, uiSlicesCount;
+let uiSelectModel, uiPlanePos, uiSlicePlane, uiSliceView, uiCameraTop, uiSlicesCount;
 
 let planePosition = 100;
 let slCount = 1000;
@@ -44,6 +44,7 @@ let documentID = null;
 let params = {
 
     loadModel: modelUpload,
+    selectModel: 1,
 
     planeX: {
 
@@ -86,20 +87,13 @@ document.querySelector( "body" ).addEventListener( "dragleave", ( e ) => {
     document.getElementById( "dragArea" ).style.display = "none"
     // console.log("leave", e.target)
 })
-document.querySelector( "canvas" ).addEventListener( "drop", e => {
-    e.preventDefault()
 
-    let reader = new FileReader()
-    fileName = e.dataTransfer.files[0].name
-
-    reader.onload = function ( e ) {
-        modelLoad( e.target.result )
-    }
-    reader.readAsDataURL( e.dataTransfer.files[0] );
-    uploadToFirebase( e.dataTransfer.files[0] )
-
-    document.getElementById( "dragArea" ).style.display = "none"
-})
+// window.addEventListener("beforeunload", (event) => {
+//     event.preventDefault()
+//     let link = document.createElement("a")
+//     link.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+//     event.returnValue = ''
+// })
 
 function modelUpload() {
     let i = document.querySelector( "input" )
@@ -135,6 +129,7 @@ function addGUI() {
     const gui = new GUI();
 
     gui.add( params, 'loadModel' )
+    uiSelectModel = gui.add( params, 'selectModel' )
 
     const planeY = gui.addFolder( 'slicer' );
     uiSlicePlane = planeY.add( params.planeY, 'slicePlane' )
@@ -274,36 +269,62 @@ function init() {
 
     loader = new STLLoader();
 
-    modelLoad( "https://firebasestorage.googleapis.com/v0/b/tdslicer-a2802.appspot.com/o/%D0%9A%D1%80%D0%B5%D0%BF%D0%BB%D0%B5%D0%BD%D0%B8%D0%B52.stl?alt=media&token=116bb146-00f2-4700-badd-7e79622ceac5" )
+    getLastModelUrl(localStorage.getItem( "userID" ))
+        .then((url) => {
+            modelLoad( url )
 
-    renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
-    renderer.shadowMap.enabled = true;
-    renderer.setPixelRatio( window.devicePixelRatio );
-    renderer.setSize( window.innerWidth, window.innerHeight );
-    renderer.setClearColor( 0x263238 );
-    window.addEventListener( 'resize', onWindowResize );
-    document.body.appendChild( renderer.domElement );
+            renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
+            renderer.shadowMap.enabled = true;
+            renderer.setPixelRatio( window.devicePixelRatio );
+            renderer.setSize( window.innerWidth, window.innerHeight );
+            renderer.setClearColor( 0x263238 );
+            window.addEventListener( 'resize', onWindowResize );
+            document.body.appendChild( renderer.domElement );
 
-    renderer.localClippingEnabled = true;
+            renderer.localClippingEnabled = true;
 
-    controls = new OrbitControls( camera, renderer.domElement );
-    controls.minDistance = 2;
-    controls.maxDistance = 1000;
-    controls.update();
+            controls = new OrbitControls( camera, renderer.domElement );
+            controls.minDistance = 2;
+            controls.maxDistance = 1000;
+            controls.update();
 
+            callback()
+        })
 }
 
-async function readModelData( userID, fileName ) {
+async function getUserModels(userID) {
+    if ( !userID ) return []
+    debugger
     const modelsRef = collection( db, "models" )
-    console.log(`Search model '${fileName} for user ${userID}'`)
-    const q = query( modelsRef, where( "userID", "==", userID ), where( "fileName", "==", fileName ) )
+    const q = query( modelsRef, where( "userID", "==", userID ) )
     const data = await getDocs( q )
     if (data.empty) {
-        console.log("Not found!")
-        return [null, null]
+        return []
     }
-    // documentID = data.docs[0].id
-    return [data.docs[0].id, data.docs[0].data()]
+    return data.docs.map((el) => {
+        return {
+            fileName: el.data().fileName,
+            filePath: el.data().filePath,
+            time: el.data().time
+        }
+    }).sort((a, b) => b.time - a.time)
+}
+
+async function getLastModelUrl(userID, callback) {
+    let models = await getUserModels(userID)
+    // debugger
+    if (models.length === 0) {
+        return "https://firebasestorage.googleapis.com/v0/b/tdslicer-a2802.appspot.com/o/%D0%9A%D1%80%D0%B5%D0%BF%D0%BB%D0%B5%D0%BD%D0%B8%D0%B52.stl?alt=media&token=116bb146-00f2-4700-badd-7e79622ceac5"
+    }
+    else {
+        fileName = models[0].fileName
+        filePath = models[0].filePath
+
+        let url = await getModelUrl(models[0].filePath)
+        // debugger
+        console.log(url, userID, models)
+        return url
+    }
 }
 
 /**
@@ -321,10 +342,25 @@ async function readOrCreateModelData( userID, fileName, data ) {
     return [id, model]
 }
 
+async function readModelData( userID, fileName ) {
+    const modelsRef = collection( db, "models" )
+    console.log(`Search model '${fileName} for user ${userID}'`)
+    const q = query( modelsRef, where( "userID", "==", userID ), where( "fileName", "==", fileName ) )
+    const data = await getDocs( q )
+    if (data.empty) {
+        console.log("Model data not fount");
+        return [null, null]
+    }
+    // documentID = data.docs[0].id
+    return [data.docs[0].id, data.docs[0].data()]
+}
+
 async function writeModelData( userID, fileName, data ) {
     let result = await db.collection( "models" ).add( {
         userID,
         fileName,
+        filePath,
+        time : new Date().getTime(),
         ...data
     } )
     return [result.id, data]
@@ -333,7 +369,10 @@ async function writeModelData( userID, fileName, data ) {
 async function updateModelData( documentID, data ) {
     if(!documentID) return
     console.log(`Update doc '${documentID}'`, data)
-    await db.collection("models").doc(documentID).update(data)
+    await db.collection("models").doc(documentID).update( {
+        ...data,
+        time : new Date().getTime()
+    } )
 }
 
 function modelLoad( model ) {
@@ -538,7 +577,7 @@ async function loadBitmaps() {
     for (let i = -1; i < len; i++) {
         planes[1].constant = 2 * planePosition / ( len - 1 ) * i - ( planePosition - 1 )
         document.getElementById( "load-info" ).innerText = ( i + 1 ) + " slices of " + len + " is ready"
-        console.log( "Generated", i, planes[1].constant )
+        // console.log( "Generated", i, planes[1].constant )
 
         let blob = await getCanvasBlob( renderer.domElement )
         zip.file( "slice" + i + ".bmp", blob )
